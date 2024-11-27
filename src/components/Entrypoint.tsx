@@ -1,52 +1,99 @@
-import { useEffect, useState } from "react";
-import { ListItem, useGetListData } from "../api/getListData";
-import { Card } from "./List";
-import { Spinner } from "./Spinner";
+import { useEffect, useState } from 'react';
+import { useGetListData } from '../api/getListData';
+import { FunctionButton, Spinner } from './ui';
+import { DeletedListItem, ListItem } from './interfaces';
+import {
+  handleDelete,
+  handleRefresh,
+  loadState,
+  persistState,
+  toggleExpand,
+} from './helpers';
+import { HiddenCards } from './HiddenCards';
+import { VisibleCards } from './VisibleCards';
+import { Headline } from './Headline';
 
 export const Entrypoint = () => {
   const [visibleCards, setVisibleCards] = useState<ListItem[]>([]);
+  const [deletedCards, setDeletedCards] = useState<DeletedListItem[]>([]);
+  const [expandedCards, setExpandedCards] = useState<number[]>([]);
+  const [isRevealed, setIsRevealed] = useState(false);
   const listQuery = useGetListData();
 
-  // TOOD
-  // const deletedCards: DeletedListItem[] = [];
-
   useEffect(() => {
-    if (listQuery.isLoading) {
-      return;
-    }
+    const storedVisibleCards = loadState('visibleCards', []);
+    const storedDeletedCards = loadState('deletedCards', []);
+    const storedExpandedCards = loadState('expandedCards', []);
+    const storedIsRevealed = loadState('isRevealed', false);
 
-    setVisibleCards(listQuery.data?.filter((item) => item.isVisible) ?? []);
+    setVisibleCards(storedVisibleCards);
+    setDeletedCards(storedDeletedCards);
+    setExpandedCards(storedExpandedCards);
+    setIsRevealed(storedIsRevealed);
+
+    if (!storedVisibleCards.length) return;
+    if (!storedDeletedCards.length) return;
+    if (!storedExpandedCards.length) return;
+
+    if (!listQuery.isLoading) {
+      const initialVisibleCards =
+        listQuery.data?.filter((item) => item.isVisible) || [];
+      setVisibleCards(initialVisibleCards);
+      persistState('visibleCards', initialVisibleCards);
+    }
   }, [listQuery.data, listQuery.isLoading]);
 
-  if (listQuery.isLoading) {
+  useEffect(() => {
+    persistState('isRevealed', isRevealed);
+  }, [isRevealed]);
+
+  if (listQuery.isLoading || listQuery.isFetching) {
     return <Spinner />;
   }
 
+  const handleDeleteClick = (id: number) => {
+    handleDelete(
+      id,
+      visibleCards,
+      deletedCards,
+      setVisibleCards,
+      setDeletedCards,
+    );
+  };
+
   return (
-    <div className="flex gap-x-16">
-      <div className="w-full max-w-xl">
-        <h1 className="mb-1 font-medium text-lg">My Awesome List ({visibleCards.length})</h1>
-        <div className="flex flex-col gap-y-3">
-          {visibleCards.map((card) => (
-            <Card key={card.id} title={card.title} description={card.description} />
-          ))}
-        </div>
+    <div className='flex items-start gap-x-16'>
+      <div className='w-default'>
+        <Headline text={visibleCards.length} />
+        <VisibleCards
+          visibleCards={visibleCards}
+          expandedCards={expandedCards}
+          handleDeleteClick={handleDeleteClick}
+          toggleExpand={toggleExpand}
+          setExpandedCards={setExpandedCards}
+        ></VisibleCards>
       </div>
-      <div className="w-full max-w-xl">
-        <div className="flex items-center justify-between">
-          <h1 className="mb-1 font-medium text-lg">Deleted Cards (0)</h1>
-          <button
-            disabled
-            className="text-white text-sm transition-colors hover:bg-gray-800 disabled:bg-black/75 bg-black rounded px-3 py-1"
-          >
-            Reveal
-          </button>
+      <div className='w-default'>
+        <div className='flex items-center justify-between'>
+          <Headline text={deletedCards.length} />
+          <div className='flex gap-4'>
+            <FunctionButton onClick={() => setIsRevealed(!isRevealed)}>
+              {isRevealed ? 'Hide' : 'Reveal'}
+            </FunctionButton>
+            <FunctionButton
+              onClick={() =>
+                handleRefresh(listQuery, setVisibleCards, setDeletedCards)
+              }
+            >
+              Refresh
+            </FunctionButton>
+          </div>
         </div>
-        <div className="flex flex-col gap-y-3">
-          {/* {deletedCards.map((card) => (
-            <Card key={card.id} card={card} />
-          ))} */}
-        </div>
+        <HiddenCards
+          isRevealed={isRevealed}
+          deletedCards={deletedCards}
+          expandedCards={expandedCards}
+        />
       </div>
     </div>
   );
